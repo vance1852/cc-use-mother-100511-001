@@ -63,6 +63,52 @@ CREATE TABLE IF NOT EXISTS audit_events (
     event_hash TEXT NOT NULL UNIQUE,
     occurred_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS permission_grants (
+    grant_id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(organization_id),
+    model_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    operator_id TEXT NOT NULL REFERENCES actors(actor_id),
+    tool_name TEXT NOT NULL,
+    data_scope TEXT NOT NULL,
+    effect TEXT NOT NULL CHECK(effect IN ('allow', 'deny')),
+    priority INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('active', 'revoked', 'expired')),
+    expires_at TEXT,
+    reason TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_permission_grants_match
+    ON permission_grants(organization_id, model_id, task_id, operator_id, tool_name);
+CREATE TABLE IF NOT EXISTS tool_calls (
+    call_id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(organization_id),
+    model_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    operator_id TEXT NOT NULL REFERENCES actors(actor_id),
+    tool_name TEXT NOT NULL,
+    data_scope TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN
+        ('approved', 'denied', 'escalated', 'approved_manual', 'rejected', 'completed', 'failed')),
+    decision_json TEXT NOT NULL,
+    requested_by TEXT NOT NULL REFERENCES actors(actor_id),
+    requested_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_scope
+    ON tool_calls(organization_id, operator_id, status);
+CREATE TABLE IF NOT EXISTS tool_call_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id TEXT NOT NULL REFERENCES tool_calls(call_id),
+    event_type TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    detail_json TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tool_call_events_call ON tool_call_events(call_id);
 """
 
 

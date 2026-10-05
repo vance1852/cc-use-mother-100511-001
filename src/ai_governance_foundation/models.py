@@ -42,6 +42,27 @@ class DomainRecord:
 
 
 @dataclass(frozen=True)
+class PermissionGrant:
+    """表示一条按模型、任务、操作者、工具和数据范围登记的授权。"""
+
+    grant_id: str
+    organization_id: str
+    model_id: str
+    task_id: str
+    operator_id: str
+    tool_name: str
+    data_scope: str
+    effect: str
+    priority: int
+    status: str
+    expires_at: str | None
+    reason: str
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class WriteReceipt:
     """描述一次幂等写入的稳定结果。"""
 

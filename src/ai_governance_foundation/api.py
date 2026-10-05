@@ -48,6 +48,41 @@ def route(service: DomainService, method: str, path: str, body: dict[str, Any] |
             query = parse_qs(parsed.query)
             after = int(query.get("after_sequence", ["0"])[0])
             return 200, {"items": service.audit_events(after)}
+        if method == "POST" and parsed.path == "/grants":
+            receipt = service.permissions.register_grant(actor_id=actor_id, **body)
+            return 200 if receipt.replayed else 201, receipt.__dict__
+        if method == "GET" and parsed.path == "/grants":
+            query = parse_qs(parsed.query)
+            filters = {key: query[key][0] for key in
+                       ("organization_id", "status", "model_id", "task_id", "operator_id", "tool_name")
+                       if key in query}
+            grants = service.permissions.list_grants(actor_id=actor_id, **filters)
+            return 200, {"items": [grant.__dict__ for grant in grants]}
+        if method == "POST" and parsed.path == "/tool-calls":
+            result = service.permissions.request_tool_call(actor_id=actor_id, **body)
+            return 200 if result["replayed"] else 201, result
+        if method == "GET" and parsed.path == "/tool-calls":
+            query = parse_qs(parsed.query)
+            filters = {key: query[key][0] for key in ("organization_id", "status", "operator_id")
+                       if key in query}
+            return 200, {"items": service.permissions.list_tool_calls(actor_id=actor_id, **filters)}
+        segments = [segment for segment in parsed.path.split("/") if segment]
+        if len(segments) == 2 and segments[0] == "tool-calls" and method == "GET":
+            return 200, service.permissions.get_tool_call(actor_id=actor_id, call_id=segments[1])
+        if len(segments) == 3 and segments[0] == "tool-calls" and method == "POST":
+            call_id, action = segments[1], segments[2]
+            if action == "escalate":
+                result = service.permissions.escalate_tool_call(actor_id=actor_id, call_id=call_id, **body)
+            elif action == "intervene":
+                result = service.permissions.intervene_tool_call(actor_id=actor_id, call_id=call_id, **body)
+            elif action == "complete":
+                result = service.permissions.complete_tool_call(actor_id=actor_id, call_id=call_id, **body)
+            else:
+                return 404, {"error": "route_not_found", "message": "接口不存在"}
+            return 200 if result["replayed"] else 201, result
+        if len(segments) == 3 and segments[0] == "grants" and segments[2] == "revoke" and method == "POST":
+            receipt = service.permissions.revoke_grant(actor_id=actor_id, grant_id=segments[1], **body)
+            return 200 if receipt.replayed else 201, receipt.__dict__
         return 404, {"error": "route_not_found", "message": "接口不存在"}
     except DomainError as exc:
         return exc.status, {"error": exc.code, "message": str(exc)}
@@ -93,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     """启动本地 HTTP 服务。"""
 
-    parser = argparse.ArgumentParser(description="启动科技战略协作基础服务")
+    parser = argparse.ArgumentParser(description="启动人工智能治理协作基础服务")
     parser.add_argument("--database", default="service.sqlite3")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
